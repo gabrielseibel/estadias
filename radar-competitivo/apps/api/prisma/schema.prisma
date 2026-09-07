@@ -1,0 +1,980 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Radar Competitivo — modelo de dados
+//
+// Princípios que o schema precisa sustentar:
+//  1. Multi-tenant: tudo pendura em `organization_id`; nada cruza organizações.
+//  2. Proveniência: todo dado relevante aponta para uma `Evidence` (URL, data,
+//     hash) para que a interface consiga responder "ver fonte".
+//  3. Confiança explícita: `confidence` + `nature` (CONFIRMED/ESTIMATED/ANALYSIS/
+//     RECOMMENDATION) impedem que estimativa vire fato.
+//  4. Histórico: snapshots imutáveis + changes derivados permitem acompanhar a
+//     evolução do concorrente ao longo do tempo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+/// Natureza epistemológica do dado. Regra fundamental da especificação:
+/// uma estimativa jamais é apresentada como fato.
+enum DataNature {
+  CONFIRMED // encontrado em fonte pública verificável
+  ESTIMATED // calculado/inferido a partir de sinais (sempre rotulado)
+  ANALYSIS // interpretação do sistema sobre os dados
+  RECOMMENDATION // ação sugerida
+  UNAVAILABLE // reconhecidamente não disponível publicamente
+}
+
+enum Plan {
+  FREE
+  PRO
+  BUSINESS
+  AGENCY
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum CompanyRole {
+  SELF // a empresa do usuário
+  COMPETITOR // concorrente monitorado
+}
+
+enum JobType {
+  FULL_ANALYSIS // pipeline completo do projeto
+  COMPANY_CRAWL // coleta de uma empresa
+  DISCOVERY // descoberta de concorrentes
+  AI_ANALYSIS // síntese analítica
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+  CANCELLED
+}
+
+enum PageStatus {
+  FETCHED
+  NOT_MODIFIED
+  SKIPPED_ROBOTS
+  SKIPPED_LIMIT
+  BLOCKED_SECURITY
+  ERROR
+}
+
+enum SourceKind {
+  WEBSITE
+  SITEMAP
+  RSS
+  SEARCH_ENGINE
+  DIRECTORY
+  REVIEW_PORTAL
+  SOCIAL_PROFILE
+  NEWS
+  JOBS
+  STRUCTURED_DATA
+  USER_PROVIDED
+  DEMO_DATASET
+}
+
+enum ChangeKind {
+  PAGE_ADDED
+  PAGE_REMOVED
+  CONTENT_CHANGED
+  TITLE_CHANGED
+  DESCRIPTION_CHANGED
+  CTA_CHANGED
+  PRODUCT_ADDED
+  PRODUCT_REMOVED
+  PRICE_CHANGED
+  SERVICE_ADDED
+  SERVICE_REMOVED
+  REVIEW_VOLUME_CHANGED
+  RATING_CHANGED
+  SOCIAL_PROFILE_ADDED
+  SOCIAL_PROFILE_REMOVED
+  SOCIAL_BIO_CHANGED
+  CONTACT_CHANGED
+  ADDRESS_CHANGED
+  JOB_POSTING_OBSERVED
+  BLOG_ACTIVITY_CHANGED
+  POSITIONING_CHANGED
+}
+
+enum ChangeImpact {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AlertSeverity {
+  CRITICAL // 🔴
+  HIGH // 🟠
+  MEDIUM // 🟡
+  INFO // 🔵
+  POSITIONING // 🟣
+  OPPORTUNITY // 🟢
+}
+
+enum AlertStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
+enum InsightKind {
+  OPPORTUNITY
+  THREAT
+  STRENGTH
+  WEAKNESS
+  TREND
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum Effort {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Horizon {
+  D7
+  D30
+  D90
+}
+
+enum ReportStatus {
+  DRAFT
+  READY
+  FAILED
+}
+
+enum CrawlFrequency {
+  MANUAL
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum AiRunKind {
+  EXECUTIVE_SYNTHESIS
+  CHAT
+  REVIEW_THEMES
+  POSITIONING
+}
+
+enum AiRunStatus {
+  SUCCEEDED
+  FAILED
+  UNAVAILABLE // provedor não configurado — estado honesto, não silencioso
+  REJECTED_UNGROUNDED // saída bloqueada pelo verificador anti-alucinação
+}
+
+// ── Tenancy ──────────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      Plan     @default(FREE)
+  /// Organização de demonstração: dados marcados como DEMONSTRAÇÃO e
+  /// nunca misturados com dados reais de outras organizações.
+  isDemo    Boolean  @default(false) @map("is_demo")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  memberships     Membership[]
+  projects        Project[]
+  companies       Company[]
+  crawlJobs       CrawlJob[]
+  alerts          Alert[]
+  insights        Insight[]
+  recommendations Recommendation[]
+  reports         Report[]
+  evidence        Evidence[]
+  aiRuns          AiAnalysis[]
+
+  @@map("organizations")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memberships Membership[]
+  aiRuns      AiAnalysis[]
+
+  @@map("users")
+}
+
+model Membership {
+  id             String       @id @default(uuid())
+  userId         String       @map("user_id")
+  organizationId String       @map("organization_id")
+  role           MemberRole   @default(OWNER)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("memberships")
+}
+
+// ── Projetos e empresas ──────────────────────────────────────────────────────
+
+model Project {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  name           String
+  segment        String?
+  city           String?
+  state          String?
+  country        String         @default("BR")
+  description    String?
+  frequency      CrawlFrequency @default(MANUAL)
+  lastAnalyzedAt DateTime?      @map("last_analyzed_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  companies       Company[]
+  crawlJobs       CrawlJob[]
+  alerts          Alert[]
+  insights        Insight[]
+  recommendations Recommendation[]
+  reports         Report[]
+  aiRuns          AiAnalysis[]
+  metrics         CompetitiveMetric[]
+
+  @@index([organizationId])
+  @@map("projects")
+}
+
+model Company {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  projectId      String      @map("project_id")
+  role           CompanyRole @default(COMPETITOR)
+
+  name           String
+  legalName      String?  @map("legal_name")
+  tradeName      String?  @map("trade_name")
+  segment        String?
+  subsegment     String?
+  city           String?
+  state          String?
+  country        String?
+  address        String?
+  phone          String?
+  email          String?
+  website        String?
+  /// Domínio canônico (sem www) — chave prática de deduplicação.
+  domain         String?
+  description    String?
+  priceRange     String?  @map("price_range")
+  openingHours   String?  @map("opening_hours")
+  latitude       Float?
+  longitude      Float?
+  unitsCount     Int?     @map("units_count")
+  /// Alias observados para a mesma entidade (entity resolution).
+  aliases        String[] @default([])
+  /// Marca dados originados do dataset de demonstração.
+  isDemo         Boolean  @default(false) @map("is_demo")
+  lastCollectedAt DateTime? @map("last_collected_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project         Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sources         Source[]
+  crawlJobs       CrawlJob[]
+  pages           CrawlPage[]
+  snapshots       CompanySnapshot[]
+  changes         CompanyChange[]
+  reviews         Review[]
+  reviewSummaries ReviewSummary[]
+  offerings       Offering[]
+  prices          PriceObservation[]
+  socialProfiles  SocialProfile[]
+  websiteMetrics  WebsiteMetric[]
+  seoMetrics      SeoMetric[]
+  metrics         CompetitiveMetric[]
+  alerts          Alert[]
+  insights        Insight[]
+  recommendations Recommendation[]
+  evidence        Evidence[]
+  images          CompanyImage[]
+  dataQuality     DataQualityScore[]
+  signals         CommercialSignal[]
+
+  @@unique([projectId, domain])
+  @@index([organizationId])
+  @@index([projectId, role])
+  @@map("companies")
+}
+
+model Source {
+  id         String     @id @default(uuid())
+  companyId  String     @map("company_id")
+  kind       SourceKind
+  url        String
+  label      String?
+  /// Confiança da fonte 0..1 (usada no Data Quality Score).
+  trust      Float      @default(0.6)
+  enabled    Boolean    @default(true)
+  lastSeenAt DateTime?  @map("last_seen_at")
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, url])
+  @@index([companyId])
+  @@map("sources")
+}
+
+// ── Coleta ───────────────────────────────────────────────────────────────────
+
+model CrawlJob {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  projectId      String?   @map("project_id")
+  companyId      String?   @map("company_id")
+  type           JobType
+  status         JobStatus @default(QUEUED)
+
+  /// Progresso real: unidades concluídas / total conhecido. Nunca sintético.
+  progressDone  Int    @default(0) @map("progress_done")
+  progressTotal Int    @default(0) @map("progress_total")
+  currentStep   String? @map("current_step")
+
+  pagesFetched Int @default(0) @map("pages_fetched")
+  pagesSkipped Int @default(0) @map("pages_skipped")
+  pagesFailed  Int @default(0) @map("pages_failed")
+
+  error       String?
+  attempts    Int       @default(0)
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  logs         JobLog[]
+  pages        CrawlPage[]
+
+  @@index([organizationId, status])
+  @@index([projectId, createdAt])
+  @@index([status, createdAt])
+  @@map("crawl_jobs")
+}
+
+model JobLog {
+  id        String   @id @default(uuid())
+  jobId     String   @map("job_id")
+  level     String   @default("info")
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  job CrawlJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@map("job_logs")
+}
+
+model CrawlPage {
+  id        String     @id @default(uuid())
+  companyId String     @map("company_id")
+  jobId     String?    @map("job_id")
+  url       String
+  finalUrl  String?    @map("final_url")
+  status    PageStatus
+  httpStatus Int?      @map("http_status")
+  contentType String?  @map("content_type")
+  /// SHA-256 do conteúdo textual normalizado — base do cache e do diff.
+  contentHash String?  @map("content_hash")
+  etag        String?
+  lastModified String? @map("last_modified")
+  bytes       Int?
+  fetchMs     Int?     @map("fetch_ms")
+  depth       Int      @default(0)
+  title       String?
+  /// Texto extraído (não o HTML bruto) — usado por parsers e evidências.
+  text        String?
+  /// HTML bruto, sujeito à política de retenção (RAW_CONTENT_RETENTION_DAYS).
+  rawHtml     String?  @map("raw_html")
+  error       String?
+  collectedAt DateTime @default(now()) @map("collected_at")
+
+  company Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job     CrawlJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, collectedAt])
+  @@index([companyId, url])
+  @@index([jobId])
+  @@map("crawl_pages")
+}
+
+// ── Snapshots e mudanças ─────────────────────────────────────────────────────
+
+model CompanySnapshot {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  jobId     String?  @map("job_id")
+  /// Retrato normalizado da empresa no momento da coleta (fonte do diff).
+  payload   Json
+  /// Hash do payload para detectar "nada mudou" rapidamente.
+  hash      String
+  pageCount Int      @default(0) @map("page_count")
+  collectedAt DateTime @default(now()) @map("collected_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  changes CompanyChange[]
+
+  @@index([companyId, collectedAt])
+  @@map("company_snapshots")
+}
+
+model CompanyChange {
+  id             String       @id @default(uuid())
+  companyId      String       @map("company_id")
+  snapshotId     String?      @map("snapshot_id")
+  kind           ChangeKind
+  impact         ChangeImpact @default(INFO)
+  field          String?
+  previousValue  String?      @map("previous_value")
+  currentValue   String?      @map("current_value")
+  summary        String
+  evidenceId     String?      @map("evidence_id")
+  observedAt     DateTime     @default(now()) @map("observed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  snapshot CompanySnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+  evidence Evidence?        @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, observedAt])
+  @@index([kind])
+  @@map("company_changes")
+}
+
+// ── Reputação ────────────────────────────────────────────────────────────────
+
+model Review {
+  id          String    @id @default(uuid())
+  companyId   String    @map("company_id")
+  sourceUrl   String    @map("source_url")
+  sourceLabel String?   @map("source_label")
+  /// Autor NÃO é armazenado: a plataforma analisa conteúdo público de
+  /// avaliação, não constrói perfis de pessoas físicas (LGPD).
+  rating      Float?
+  text        String?
+  language    String?
+  publishedAt DateTime? @map("published_at")
+  collectedAt DateTime  @default(now()) @map("collected_at")
+  contentHash String    @map("content_hash")
+  evidenceId  String?   @map("evidence_id")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, contentHash])
+  @@index([companyId, publishedAt])
+  @@map("reviews")
+}
+
+/// Agregado de reputação observado em uma fonte (nota + volume), com histórico.
+model ReviewSummary {
+  id           String   @id @default(uuid())
+  companyId    String   @map("company_id")
+  sourceLabel  String   @map("source_label")
+  sourceUrl    String   @map("source_url")
+  rating       Float?
+  reviewCount  Int?     @map("review_count")
+  nature       DataNature @default(CONFIRMED)
+  evidenceId   String?  @map("evidence_id")
+  observedAt   DateTime @default(now()) @map("observed_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, observedAt])
+  @@map("review_summaries")
+}
+
+/// Temas extraídos das avaliações (atendimento, preço, prazo…), com polaridade.
+model ReviewTheme {
+  id         String   @id @default(uuid())
+  companyId  String   @map("company_id")
+  theme      String
+  polarity   String // POSITIVE | NEGATIVE | MIXED
+  mentions   Int      @default(0)
+  sampleQuote String? @map("sample_quote")
+  method     String   @default("lexicon") // lexicon | ai
+  confidence Float    @default(0.5)
+  observedAt DateTime @default(now()) @map("observed_at")
+
+  @@unique([companyId, theme, polarity])
+  @@index([companyId])
+  @@map("review_themes")
+}
+
+// ── Oferta ───────────────────────────────────────────────────────────────────
+
+/// Produto ou serviço identificado publicamente (unificado: `kind` distingue).
+model Offering {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  kind        String // PRODUCT | SERVICE | PLAN
+  name        String
+  /// Nome normalizado para comparação/GAP (minúsculo, sem acento, sem ruído).
+  normalized  String
+  category    String?
+  description String?
+  url         String?
+  evidenceId  String?  @map("evidence_id")
+  nature      DataNature @default(CONFIRMED)
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+  removedAt   DateTime? @map("removed_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+  prices   PriceObservation[]
+
+  @@unique([companyId, kind, normalized])
+  @@index([companyId])
+  @@index([normalized])
+  @@map("offerings")
+}
+
+model PriceObservation {
+  id         String   @id @default(uuid())
+  companyId  String   @map("company_id")
+  offeringId String?  @map("offering_id")
+  label      String
+  amount     Float
+  currency   String   @default("BRL")
+  unit       String? // mensal, unitário, a partir de…
+  isPromo    Boolean  @default(false) @map("is_promo")
+  url        String?
+  evidenceId String?  @map("evidence_id")
+  nature     DataNature @default(CONFIRMED)
+  observedAt DateTime @default(now()) @map("observed_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  offering Offering?  @relation(fields: [offeringId], references: [id], onDelete: SetNull)
+  evidence Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, observedAt])
+  @@index([offeringId, observedAt])
+  @@map("price_observations")
+}
+
+// ── Presença digital ─────────────────────────────────────────────────────────
+
+model SocialProfile {
+  id         String   @id @default(uuid())
+  companyId  String   @map("company_id")
+  platform   String // instagram | facebook | linkedin | youtube | tiktok | x
+  handle     String?
+  url        String
+  evidenceId String?  @map("evidence_id")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence  Evidence?        @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+  snapshots SocialSnapshot[]
+
+  @@unique([companyId, platform, url])
+  @@index([companyId])
+  @@map("social_profiles")
+}
+
+model SocialSnapshot {
+  id          String   @id @default(uuid())
+  profileId   String   @map("profile_id")
+  followers   Int?
+  posts       Int?
+  bio         String?
+  nature      DataNature @default(CONFIRMED)
+  /// Explica por que um campo está vazio: "não acessível publicamente".
+  note        String?
+  observedAt  DateTime @default(now()) @map("observed_at")
+
+  profile SocialProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, observedAt])
+  @@map("social_snapshots")
+}
+
+model WebsiteMetric {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+
+  pagesCrawled     Int     @default(0) @map("pages_crawled")
+  pagesDiscovered  Int     @default(0) @map("pages_discovered")
+  hasSitemap       Boolean @default(false) @map("has_sitemap")
+  hasRss           Boolean @default(false) @map("has_rss")
+  hasBlog          Boolean @default(false) @map("has_blog")
+  blogPostsSeen    Int     @default(0) @map("blog_posts_seen")
+  /// Dias médios entre publicações observadas (null = não verificável).
+  publishIntervalDays Float? @map("publish_interval_days")
+  hasContactForm   Boolean @default(false) @map("has_contact_form")
+  hasWhatsapp      Boolean @default(false) @map("has_whatsapp")
+  hasPhone         Boolean @default(false) @map("has_phone")
+  ctaCount         Int     @default(0) @map("cta_count")
+  formCount        Int     @default(0) @map("form_count")
+  socialLinks      Int     @default(0) @map("social_links")
+  avgResponseMs    Int?    @map("avg_response_ms")
+  httpsOk          Boolean @default(false) @map("https_ok")
+  /// Score 0..100 com composição auditável em `breakdown`.
+  score            Float?
+  breakdown        Json?
+  observedAt       DateTime @default(now()) @map("observed_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, observedAt])
+  @@map("website_metrics")
+}
+
+model SeoMetric {
+  id        String @id @default(uuid())
+  companyId String @map("company_id")
+
+  indexablePages    Int     @default(0) @map("indexable_pages")
+  titleCoverage     Float?  @map("title_coverage")
+  descriptionCoverage Float? @map("description_coverage")
+  h1Coverage        Float?  @map("h1_coverage")
+  avgTitleLength    Float?  @map("avg_title_length")
+  structuredDataTypes String[] @default([]) @map("structured_data_types")
+  hasOpenGraph      Boolean @default(false) @map("has_open_graph")
+  hasCanonical      Boolean @default(false) @map("has_canonical")
+  hasRobotsTxt      Boolean @default(false) @map("has_robots_txt")
+  hasLocalSignals   Boolean @default(false) @map("has_local_signals")
+  imageAltCoverage  Float?  @map("image_alt_coverage")
+  internalLinks     Int     @default(0) @map("internal_links")
+  /// Termos relevantes derivados do conteúdo coletado (TF ponderado).
+  keywords          Json?
+  wordCountTotal    Int     @default(0) @map("word_count_total")
+  score             Float?
+  breakdown         Json?
+  observedAt        DateTime @default(now()) @map("observed_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, observedAt])
+  @@map("seo_metrics")
+}
+
+/// Imagem pública referenciada (URL + metadados; binário não é armazenado).
+model CompanyImage {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  url       String
+  pageUrl   String?  @map("page_url")
+  category  String   @default("outras") // fachada|interior|produtos|equipe|publicidade|eventos|redes_sociais|materiais|outras
+  alt       String?
+  width     Int?
+  height    Int?
+  evidenceId String? @map("evidence_id")
+  observedAt DateTime @default(now()) @map("observed_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, url])
+  @@index([companyId, category])
+  @@map("company_images")
+}
+
+/// Sinais comerciais indiretos (nunca faturamento inventado).
+model CommercialSignal {
+  id         String   @id @default(uuid())
+  companyId  String   @map("company_id")
+  kind       String // review_growth|new_unit|new_offering|price_change|campaign|job_posting|geo_expansion|digital_growth
+  label      String
+  detail     String?
+  strength   Float    @default(0.5)
+  nature     DataNature @default(ESTIMATED)
+  /// Metodologia legível — obrigatória para qualquer inferência.
+  methodology String?
+  evidenceId String?  @map("evidence_id")
+  observedAt DateTime @default(now()) @map("observed_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, observedAt])
+  @@map("commercial_signals")
+}
+
+// ── Métricas competitivas ────────────────────────────────────────────────────
+
+model CompetitiveMetric {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  companyId String   @map("company_id")
+
+  reputationScore  Float? @map("reputation_score")
+  presenceScore    Float? @map("presence_score")
+  offerScore       Float? @map("offer_score")
+  contentScore     Float? @map("content_score")
+  seoScore         Float? @map("seo_score")
+  experienceScore  Float? @map("experience_score")
+  activityScore    Float? @map("activity_score")
+  priceScore       Float? @map("price_score")
+  growthScore      Float? @map("growth_score")
+  /// Score competitivo composto — analítico, não verdade objetiva.
+  compositeScore   Float? @map("composite_score")
+  threatScore      Float? @map("threat_score")
+  /// Composição completa (pesos, entradas, cobertura) para explicabilidade.
+  breakdown        Json?
+  /// Quanto do score foi calculado com dados presentes (0..1).
+  coverage         Float  @default(0)
+  computedAt       DateTime @default(now()) @map("computed_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, computedAt])
+  @@index([companyId, computedAt])
+  @@map("competitive_metrics")
+}
+
+model DataQualityScore {
+  id         String   @id @default(uuid())
+  companyId  String   @map("company_id")
+  score      Float
+  sourcesCount Int    @default(0) @map("sources_count")
+  freshnessDays Float? @map("freshness_days")
+  completeness Float  @default(0)
+  consistency  Float  @default(0)
+  reliability  Float  @default(0)
+  duplication  Float  @default(0)
+  breakdown  Json?
+  computedAt DateTime @default(now()) @map("computed_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, computedAt])
+  @@map("data_quality_scores")
+}
+
+// ── Saídas analíticas ────────────────────────────────────────────────────────
+
+model Alert {
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  projectId      String        @map("project_id")
+  companyId      String?       @map("company_id")
+  severity       AlertSeverity
+  status         AlertStatus   @default(NEW)
+  title          String
+  body           String
+  changeKind     ChangeKind?   @map("change_kind")
+  evidenceId     String?       @map("evidence_id")
+  /// Chave de idempotência: impede alerta duplicado para o mesmo fato.
+  dedupeKey      String        @map("dedupe_key")
+  observedAt     DateTime      @default(now()) @map("observed_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence     Evidence?    @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, dedupeKey])
+  @@index([organizationId, status])
+  @@index([projectId, createdAt])
+  @@map("alerts")
+}
+
+model Insight {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  projectId      String      @map("project_id")
+  companyId      String?     @map("company_id")
+  kind           InsightKind
+  title          String
+  body           String
+  /// Sinais/valores que sustentam o insight (auditável na interface).
+  evidenceRefs   Json?       @map("evidence_refs")
+  nature         DataNature  @default(ANALYSIS)
+  confidence     Float       @default(0.6)
+  score          Float?
+  dedupeKey      String      @map("dedupe_key")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, dedupeKey])
+  @@index([projectId, kind])
+  @@map("insights")
+}
+
+model Recommendation {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  projectId      String   @map("project_id")
+  companyId      String?  @map("company_id")
+
+  /// Estrutura obrigatória da especificação (§22 e §46).
+  problem        String
+  evidence       String
+  potentialImpact String  @map("potential_impact")
+  action         String
+  successMetric  String   @map("success_metric")
+  priority       Priority
+  effort         Effort
+  horizon        Horizon
+  /// Referências verificáveis (evidence ids / URLs).
+  evidenceRefs   Json?    @map("evidence_refs")
+  nature         DataNature @default(RECOMMENDATION)
+  impactValue    Float    @default(0) @map("impact_value")
+  effortValue    Float    @default(0) @map("effort_value")
+  dedupeKey      String   @map("dedupe_key")
+  status         String   @default("OPEN")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, dedupeKey])
+  @@index([projectId, priority])
+  @@map("recommendations")
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  projectId      String       @map("project_id")
+  title          String
+  status         ReportStatus @default(DRAFT)
+  /// Documento estruturado (14 seções) — renderizado em HTML/PDF sob demanda.
+  content        Json
+  aiEnriched     Boolean      @default(false) @map("ai_enriched")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("reports")
+}
+
+// ── Evidências ───────────────────────────────────────────────────────────────
+
+model Evidence {
+  id             String     @id @default(uuid())
+  organizationId String     @map("organization_id")
+  companyId      String?    @map("company_id")
+  sourceKind     SourceKind @map("source_kind")
+  sourceLabel    String?    @map("source_label")
+  url            String
+  /// Trecho exato que sustenta a afirmação (limitado, sem HTML).
+  excerpt        String?
+  contentHash    String?    @map("content_hash")
+  httpStatus     Int?       @map("http_status")
+  confidence     Float      @default(0.7)
+  collectedAt    DateTime   @default(now()) @map("collected_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company         Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  changes         CompanyChange[]
+  reviews         Review[]
+  reviewSummaries ReviewSummary[]
+  offerings       Offering[]
+  prices          PriceObservation[]
+  socialProfiles  SocialProfile[]
+  images          CompanyImage[]
+  signals         CommercialSignal[]
+  alerts          Alert[]
+
+  @@index([organizationId, collectedAt])
+  @@index([companyId, collectedAt])
+  @@map("evidence")
+}
+
+// ── IA ───────────────────────────────────────────────────────────────────────
+
+model AiAnalysis {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  projectId      String?     @map("project_id")
+  userId         String?     @map("user_id")
+  kind           AiRunKind
+  status         AiRunStatus
+  model          String?
+  question       String?
+  answer         String?
+  /// Ferramentas consultadas e o que retornaram — rastro de fundamentação.
+  toolTrace      Json?       @map("tool_trace")
+  /// Resultado do verificador anti-alucinação.
+  groundingReport Json?      @map("grounding_report")
+  inputTokens    Int?        @map("input_tokens")
+  outputTokens   Int?        @map("output_tokens")
+  latencyMs      Int?        @map("latency_ms")
+  error          String?
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("ai_analyses")
+}
+
+/// Cache de robots.txt por host (respeito às regras + menos requisições).
+model RobotsCache {
+  id        String   @id @default(uuid())
+  host      String   @unique
+  body      String
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+  status    Int?
+
+  @@map("robots_cache")
+}

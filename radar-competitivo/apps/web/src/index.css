@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { color-scheme: dark; }
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-ink-950 text-ink-100 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'tnum';
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-ink-700 rounded-full border-2 border-solid border-transparent bg-clip-padding; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-ink-600; }
+  ::selection { @apply bg-radar-500/30 text-white; }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-ink-800 bg-ink-900/70 backdrop-blur-sm;
+  }
+  .panel-hover {
+    @apply transition-colors duration-200 hover:border-ink-700 hover:bg-ink-850/80;
+  }
+  .label {
+    @apply text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400;
+  }
+  .stat {
+    @apply text-3xl font-semibold tracking-tight tabular-nums text-white;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-150
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-radar-500 text-ink-950 hover:bg-radar-400 active:scale-[0.98] shadow-[0_0_0_1px_rgba(18,173,129,0.4),0_8px_24px_-10px_rgba(18,173,129,0.7)];
+  }
+  .btn-ghost {
+    @apply btn border border-ink-700 bg-ink-850 text-ink-100 hover:border-ink-600 hover:bg-ink-800;
+  }
+  .btn-subtle {
+    @apply btn text-ink-300 hover:bg-ink-850 hover:text-ink-100;
+  }
+  .input {
+    @apply w-full rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm text-ink-100 placeholder:text-ink-500
+           outline-none transition focus:border-radar-500 focus:ring-2 focus:ring-radar-500/20;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium;
+  }
+  .th {
+    @apply sticky top-0 z-10 whitespace-nowrap bg-ink-900/95 px-3 py-2.5 text-left text-[11px] font-semibold
+           uppercase tracking-wider text-ink-400 backdrop-blur;
+  }
+  .td { @apply border-t border-ink-800 px-3 py-2.5 align-top text-sm text-ink-200; }
+  .link { @apply text-radar-300 underline-offset-2 hover:text-radar-200 hover:underline; }
+}
