@@ -1,3 +1,27 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Radar Competitivo — pilha completa.
+#
+#   docker compose up
+#
+# Sobe banco, aplica as migrations, e roda API, worker e interface.
+# A interface fica em http://localhost:8080 e encaminha /api para a API.
+#
+# Para subir apenas o banco e rodar o código na máquina (desenvolvimento):
+#   docker compose up -d db
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-api-env: &api-env
+  DATABASE_URL: postgresql://radar:radar@db:5432/radar?schema=public
+  NODE_ENV: production
+  # Troque em qualquer uso que não seja local: a API recusa subir em produção
+  # com um segredo de menos de 32 caracteres.
+  JWT_SECRET: ${JWT_SECRET:-troque-este-segredo-local-de-desenvolvimento-0123456789}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+  # Camada de IA e descoberta são opcionais: sem chave, a plataforma funciona
+  # com o motor analítico determinístico e declara a indisponibilidade.
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  SEARCH_PROVIDER: ${SEARCH_PROVIDER:-none}
+
 services:
   db:
     image: postgres:16-alpine
@@ -6,14 +30,64 @@ services:
       POSTGRES_PASSWORD: radar
       POSTGRES_DB: radar
     ports:
-      - "5432:5432"
+      - '${DB_PORT:-5432}:5432'
     volumes:
       - radar_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U radar"]
+      test: ['CMD-SHELL', 'pg_isready -U radar']
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Aplica as migrations e encerra. API e worker esperam esta etapa concluir,
+  # para nenhum dos dois encontrar um schema desatualizado.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment: *api-env
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      <<: *api-env
+      PORT: '4000'
+      # Em produção a coleta roda no worker, em processo separado.
+      WORKER_INLINE: 'false'
+    ports:
+      - '${API_PORT:-4000}:4000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment: *api-env
+    command: ['node', 'dist/src/worker-main.js']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '${WEB_PORT:-8080}:80'
+    depends_on:
+      - api
+    restart: unless-stopped
 
 volumes:
   radar_pgdata:

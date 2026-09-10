@@ -42,6 +42,22 @@ Consequências práticas disso no código:
 
 Pré-requisitos: **Node.js 20+** e **PostgreSQL 16** (ou Docker).
 
+### Opção A — tudo em containers
+
+Não exige Node instalado. Um comando sobe banco, migrations, API, worker e interface:
+
+```bash
+docker compose up
+```
+
+Abra <http://localhost:8080>. Para popular o modo demonstração:
+
+```bash
+docker compose run --rm migrate npm run db:seed:demo --workspace=apps/api
+```
+
+### Opção B — desenvolvimento local
+
 ```bash
 # 1. Banco de dados
 docker compose up -d db          # ou use um PostgreSQL já instalado
@@ -85,6 +101,10 @@ npm test --workspace=apps/api
 entidades, motor analítico, detecção de mudanças, fundamentação da IA e integração da
 API. O crawler é testado contra um **servidor HTTP local real** — não há simulação da
 camada de rede.
+
+O mesmo conjunto roda no CI (`.github/workflows/ci.yml`) a cada push e pull request,
+contra um PostgreSQL de verdade: typecheck da API e da interface, migrations, os 136
+testes e o build.
 
 ---
 

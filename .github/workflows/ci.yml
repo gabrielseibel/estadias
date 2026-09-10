@@ -1,0 +1,79 @@
+name: CI — Radar Competitivo
+
+on:
+  push:
+    branches: ['**']
+    paths: ['radar-competitivo/**', '.github/workflows/ci.yml']
+  pull_request:
+    paths: ['radar-competitivo/**', '.github/workflows/ci.yml']
+
+# Um push novo cancela a execução anterior do mesmo branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: radar-competitivo
+
+jobs:
+  verificar:
+    name: Typecheck, build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # O projeto usa recursos exclusivos do PostgreSQL (arrays escalares,
+    # FOR UPDATE SKIP LOCKED, busca case-insensitive), então a suíte roda
+    # contra um Postgres real — não contra um substituto.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: radar
+          POSTGRES_PASSWORD: radar
+          POSTGRES_DB: radar_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U radar"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://radar:radar@localhost:5432/radar_test?schema=public
+      JWT_SECRET: segredo-de-ci-com-mais-de-32-caracteres-aqui
+      NODE_ENV: test
+      # O crawler é exercitado contra um servidor HTTP local de fixtures; sem
+      # isto o guarda SSRF bloquearia 127.0.0.1, como faz em produção.
+      CRAWLER_ALLOW_PRIVATE_HOSTS: 'false'
+      CRAWLER_DOMAIN_DELAY_MS: '0'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: radar-competitivo/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar cliente Prisma
+        run: npm run db:generate --workspace=apps/api
+
+      - name: Aplicar migrations no banco de teste
+        run: npm run db:deploy --workspace=apps/api
+
+      - name: Typecheck (API)
+        run: npm run typecheck --workspace=apps/api
+
+      - name: Typecheck (interface)
+        run: npm run typecheck --workspace=apps/web
+
+      - name: Testes
+        run: npm test --workspace=apps/api
+
+      - name: Build
+        run: npm run build
