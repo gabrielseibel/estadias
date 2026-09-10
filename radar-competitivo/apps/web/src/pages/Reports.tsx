@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Download, FileText, Loader2, Plus } from 'lucide-react';
-import { api, getToken } from '../lib/api';
+import { api, apiUrl, getToken } from '../lib/api';
 import { useApi, useSelectedProject } from '../lib/hooks';
 import type { ReportDocument, ReportSection } from '../lib/types';
 import { EmptyState, ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, Table, Chip } from '../components/ui';
@@ -34,7 +34,7 @@ export function Reports() {
    * O token vai por cabeçalho, então o arquivo é buscado e aberto como blob.
    */
   async function exportReport(id: string) {
-    const res = await fetch(`/api/reports/${id}/export.html`, { headers: { authorization: `Bearer ${getToken()}` } });
+    const res = await fetch(apiUrl(`/reports/${id}/export.html`), { headers: { authorization: `Bearer ${getToken()}` } });
     const html = await res.text();
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     const win = window.open(url, '_blank');

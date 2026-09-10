@@ -196,6 +196,7 @@ Documentação detalhada:
 - [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) — decisões técnicas e fluxo de dados
 - [`docs/METODOLOGIA.md`](docs/METODOLOGIA.md) — como cada score é calculado
 - [`docs/PRIVACIDADE.md`](docs/PRIVACIDADE.md) — LGPD, ética de coleta e retenção
+- [`docs/DEPLOY.md`](docs/DEPLOY.md) — como colocar no ar (Render e alternativas)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — o que vem depois do MVP
 
 ---
@@ -214,6 +215,7 @@ mudam o comportamento:
 | `SEARCH_PROVIDER` | `none` | Descoberta automática: `searxng`, `brave` ou `google_cse` |
 | `ANTHROPIC_API_KEY` | vazio | Habilita síntese executiva e Ask Radar |
 | `RAW_CONTENT_RETENTION_DAYS` | `30` | Prazo de descarte do HTML bruto coletado |
+| `VITE_API_URL` | `/api` | Endereço da API no **build** da interface. Só é necessária quando interface e API ficam em origens diferentes |
 
 ### Descoberta automática de concorrentes
 
@@ -234,6 +236,19 @@ npm run worker  --workspace=apps/api    # worker de coleta em processo separado
 Defina `WORKER_INLINE=false` para que a API não execute jobs no próprio processo.
 `JWT_SECRET` com pelo menos 32 caracteres é obrigatório — a API se recusa a subir sem
 isso em produção.
+
+### Colocar no ar
+
+O repositório traz um blueprint da Render ([`render.yaml`](render.yaml)) que cria
+banco, API e interface sem preenchimento manual: **Render → New → Blueprint**, conecte
+o repositório, confirme.
+
+O passo a passo, as limitações do plano gratuito e o que qualquer outra plataforma
+precisa oferecer estão em [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+GitHub Pages não serve para hospedar o Radar: ele publica apenas arquivos estáticos e
+não executa Node nem PostgreSQL. Só a interface subiria — e falharia em toda tela, por
+não haver API respondendo.
 
 ---
 

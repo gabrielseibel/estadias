@@ -32,10 +32,20 @@ export const config = {
     secret: jwtSecret || 'dev-only-insecure-secret-change-me-please-0123456789',
     expiresIn: str('JWT_EXPIRES_IN', '12h'),
   },
+  /**
+   * Origens permitidas no CORS.
+   *
+   * Aceita origem completa ("https://app.exemplo.com") ou apenas o hostname
+   * ("app.exemplo.com"): plataformas de deploy costumam expor o host de um
+   * serviço sem o esquema, e uma entrada sem "https://" nunca casaria com o
+   * cabeçalho Origin enviado pelo navegador.
+   */
   corsOrigins: str('CORS_ORIGINS', 'http://localhost:5173')
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean),
+    .filter(Boolean)
+    .map((origin) => (/^https?:\/\//i.test(origin) ? origin : `https://${origin}`))
+    .map((origin) => origin.replace(/\/$/, '')),
   crawler: {
     userAgent: str('CRAWLER_USER_AGENT', 'RadarCompetitivoBot/0.1 (+https://radarcompetitivo.example/bot)'),
     maxPagesPerSite: num('CRAWLER_MAX_PAGES_PER_SITE', 25),

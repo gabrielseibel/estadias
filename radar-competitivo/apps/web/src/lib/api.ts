@@ -1,5 +1,32 @@
 /** Cliente HTTP da API. Anexa o token e normaliza erros para a interface. */
 
+/**
+ * Base das chamadas à API.
+ *
+ * O padrão `/api` cobre os dois cenários em que interface e API compartilham a
+ * origem: o proxy do Vite em desenvolvimento e o nginx no Docker Compose.
+ * Quando as duas ficam em hosts distintos — como em um deploy na Render, onde
+ * o site estático e o serviço da API têm domínios próprios — basta definir
+ * `VITE_API_URL` no build com a URL da API.
+ */
+function resolveBaseUrl(raw: string | undefined): string {
+  const value = (raw ?? '/api').trim().replace(/\/$/, '');
+  if (!value) return '/api';
+  // Caminho relativo (mesma origem) fica como está.
+  if (value.startsWith('/')) return value;
+  // Plataformas de deploy costumam expor apenas o hostname do serviço
+  // ("radar-api.onrender.com"). Sem esquema, a URL seria interpretada como
+  // caminho relativo e todas as chamadas falhariam silenciosamente.
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+export const API_BASE_URL = resolveBaseUrl(import.meta.env.VITE_API_URL);
+
+/** Monta a URL absoluta de uma rota da API a partir do caminho relativo. */
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 const TOKEN_KEY = 'radar.token';
 
 export function getToken(): string | null {
@@ -26,7 +53,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...init,
     headers: {
       ...(init.body ? { 'content-type': 'application/json' } : {}),
