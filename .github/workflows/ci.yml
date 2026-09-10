@@ -1,8 +1,11 @@
 name: CI — Radar Competitivo
 
 on:
+  # O push é restrito ao branch padrão de propósito: em um branch com pull
+  # request aberto, os dois gatilhos disparariam execuções idênticas do mesmo
+  # commit. O evento pull_request já cobre os branches de trabalho.
   push:
-    branches: ['**']
+    branches: [master, main]
     paths: ['radar-competitivo/**', '.github/workflows/ci.yml']
   pull_request:
     paths: ['radar-competitivo/**', '.github/workflows/ci.yml']
