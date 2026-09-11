@@ -10,9 +10,14 @@ Render, para a qual o repositório já traz um blueprint pronto.
 
 ## Render (blueprint pronto)
 
-O arquivo [`render.yaml`](../render.yaml) declara banco, API e interface. Nenhum
+O arquivo [`render.yaml`](../../render.yaml) declara banco, API e interface. Nenhum
 campo precisa ser preenchido à mão: senha do banco, segredo de JWT e as URLs que os
 serviços trocam entre si são resolvidos pela própria Render.
+
+O blueprint fica na **raiz do repositório**, e não dentro de `radar-competitivo/`:
+a Render procura `render.yaml` apenas na raiz, e não encontra o arquivo em
+subdiretório — o erro é "Blueprint file render.yaml not found on <branch>". O campo
+`rootDir` de cada serviço é que aponta para a pasta do projeto.
 
 1. Acesse **Render → New → Blueprint**
 2. Conecte este repositório e escolha o branch

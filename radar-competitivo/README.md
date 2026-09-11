@@ -239,7 +239,7 @@ isso em produção.
 
 ### Colocar no ar
 
-O repositório traz um blueprint da Render ([`render.yaml`](render.yaml)) que cria
+O repositório traz um blueprint da Render ([`render.yaml`](../render.yaml)) que cria
 banco, API e interface sem preenchimento manual: **Render → New → Blueprint**, conecte
 o repositório, confirme.
 
