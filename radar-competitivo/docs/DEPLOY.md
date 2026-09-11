@@ -87,6 +87,40 @@ Corrija com o domínio público completo, copiado do topo da página do serviço
 interface. Aproveite para conferir `CORS_ORIGINS` na API: pelo mesmo motivo, ele
 precisa ser o domínio público de `radar-web`.
 
+### Se o preflight der 404 e o console acusar erro de CORS
+
+Sintoma: a aba Network mostra duas linhas para a mesma chamada — uma `preflight`
+com **404** e uma `fetch` com **CORS error**.
+
+A API não responde 404 a um preflight. O `OPTIONS` é encerrado pelo middleware de
+CORS antes de chegar ao roteamento, e devolve `204` mesmo para rota inexistente e
+mesmo para origem não autorizada — origem não autorizada é recusada pela *ausência*
+do cabeçalho de liberação, não por um código de erro. Há teste fixando isso
+(`apps/api/tests/cors.test.ts`).
+
+Ou seja: quem respondeu 404 não foi a aplicação. O endereço em `VITE_API_URL` não
+está servindo a API. Para confirmar, abra no navegador:
+
+```
+https://SEU-SERVICO-API.onrender.com/api/health
+```
+
+- **JSON com `{"status":"ok"}`** → a API está no ar nesse endereço; então
+  `VITE_API_URL` aponta para outro lugar. Corrija e reconstrua a interface.
+- **Página "Not Found" da Render** → esse serviço não tem deploy ativo. Acontece
+  quando sobrou um serviço de uma tentativa anterior de blueprint: o nome existe,
+  o roteador da Render responde, mas não há aplicação atrás. No painel, veja quais
+  serviços estão **Live** e use a URL do que está rodando.
+- **Demora ~1 min e depois responde** → é a hibernação do plano gratuito, não um
+  erro de configuração.
+
+No painel, confira também se existe mais de um serviço de API (`radar-api`,
+`radar-api-xxxx`). Um só deve ficar; os outros confundem o diagnóstico.
+
+Com o endereço certo e a API respondendo, se ainda houver bloqueio de CORS, o que
+falta é `CORS_ORIGINS` na API com a URL pública **exata** da interface — incluindo
+`https://` e sem barra no fim.
+
 ### Se aparecer `cannot have more than one active free tier database`
 
 Não é erro do projeto: o plano gratuito da Render permite **um único banco

@@ -66,16 +66,39 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Mensagem para a falha que acontece ANTES de existir resposta: DNS que não
+ * resolve, conexão recusada, certificado inválido ou preflight de CORS barrado.
+ * O navegador esconde o motivo por segurança — `fetch` rejeita com um
+ * "Failed to fetch" que não diz nada. Sem esta tradução, um erro de
+ * configuração do deploy aparece na tela como se a conta é que estivesse
+ * errada, que foi exatamente o que aconteceu em produção.
+ */
+export function networkErrorMessage(base: string, origin: string | null): string {
+  const alvo = base.startsWith('/') ? 'a API na mesma origem do site' : `a API em ${base}`;
+  const cors = origin ? ` e se ela libera a origem ${origin} (CORS_ORIGINS)` : '';
+  return `Não foi possível falar com ${alvo}. Verifique se o endereço está correto e no ar${cors}.`;
+}
+
+function currentOrigin(): string | null {
+  return typeof location !== 'undefined' && location.origin ? location.origin : null;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const res = await fetch(apiUrl(path), {
-    ...init,
-    headers: {
-      ...(init.body ? { 'content-type': 'application/json' } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(path), {
+      ...init,
+      headers: {
+        ...(init.body ? { 'content-type': 'application/json' } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    });
+  } catch {
+    throw new ApiError(0, networkErrorMessage(API_BASE_URL, currentOrigin()), 'network');
+  }
 
   if (res.status === 204) return undefined as T;
 
