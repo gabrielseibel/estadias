@@ -1,0 +1,142 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Radar Competitivo — blueprint da Render
+#
+# Como usar:
+#   1. Render → New → Blueprint
+#   2. Conecte este repositório e escolha o branch
+#   3. Confirme — a Render cria o banco, a API e a interface
+#
+# A senha do banco e o segredo de JWT são gerados pela própria Render.
+#
+# Duas variáveis precisam ser preenchidas DEPOIS do primeiro deploy, quando as
+# URLs públicas existirem — CORS_ORIGINS na API e VITE_API_URL na interface.
+# Elas não podem ser derivadas automaticamente: a referência entre serviços da
+# Render devolve o nome interno, que o navegador não resolve. O passo a passo
+# está em radar-competitivo/docs/DEPLOY.md.
+#
+# A chave de IA é opcional e fica em branco de propósito: sem ela a plataforma
+# funciona com o motor analítico determinístico e declara a indisponibilidade
+# na interface. Para habilitar a síntese executiva e o chat Ask Radar, preencha
+# ANTHROPIC_API_KEY no painel do serviço radar-api.
+# ─────────────────────────────────────────────────────────────────────────────
+
+databases:
+  - name: radar-db
+    databaseName: radar
+    user: radar
+    plan: free
+
+services:
+  # ── API ────────────────────────────────────────────────────────────────────
+  # As migrations rodam no start: em uma instância única é o ponto mais seguro
+  # para garantir que o schema está em dia antes de atender a primeira request.
+  - type: web
+    name: radar-api
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: radar-competitivo
+    # --include=dev é obrigatório: NODE_ENV=production faz o npm ci pular as
+    # devDependencies, e typescript, @types/node e a CLI do Prisma estão lá —
+    # as três são necessárias para compilar e para aplicar migrations no start.
+    buildCommand: npm ci --include=dev && npm run db:generate --workspace=apps/api && npm run build --workspace=apps/api
+    startCommand: npm run db:deploy --workspace=apps/api && node apps/api/dist/src/main.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: radar-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      # PREENCHER APÓS O PRIMEIRO DEPLOY: a URL pública da interface, que o
+      # navegador envia no cabeçalho Origin (ex.: https://radar-web-ab12.onrender.com).
+      #
+      # Referenciar o serviço com `fromService: property: host` NÃO serve aqui:
+      # essa propriedade devolve o nome interno do serviço, resolvível apenas
+      # dentro da rede da Render. O CORS compara com a origem pública, então o
+      # valor interno nunca casaria — e o sintoma seria um bloqueio de CORS
+      # difícil de rastrear.
+      - key: CORS_ORIGINS
+        sync: false
+      # O plano gratuito da Render não inclui serviços de background. Com o
+      # worker embutido, a coleta roda no mesmo processo da API — suficiente
+      # para avaliar a plataforma. Ao migrar para um plano pago, defina
+      # WORKER_INLINE=false e habilite o serviço radar-worker no fim do arquivo.
+      - key: WORKER_INLINE
+        value: 'true'
+      # Menos páginas por coleta: o plano gratuito tem CPU e memória limitadas.
+      - key: CRAWLER_MAX_PAGES_PER_SITE
+        value: '15'
+      - key: CRAWLER_CONCURRENCY
+        value: '2'
+      - key: SEARCH_PROVIDER
+        value: none
+      # Opcional: preencha no painel para habilitar a camada de IA.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+  # ── Interface ──────────────────────────────────────────────────────────────
+  - type: web
+    name: radar-web
+    runtime: static
+    rootDir: radar-competitivo
+    # Mesmo motivo do serviço da API: vite e typescript são devDependencies.
+    buildCommand: npm ci --include=dev && npm run build --workspace=apps/web
+    staticPublishPath: apps/web/dist
+    envVars:
+      # PREENCHER APÓS O PRIMEIRO DEPLOY: a URL pública da API
+      # (ex.: https://radar-api-ab12.onrender.com). O sufixo /api é opcional —
+      # a interface o acrescenta quando recebe apenas a origem.
+      #
+      # Sem esta variável o bundle chama /api na própria origem do site
+      # estático, onde não há API. E referenciar o serviço com
+      # `fromService: property: host` não resolve: devolve o nome interno do
+      # serviço, que o navegador do usuário não consegue resolver.
+      #
+      # A variável é lida no BUILD: alterá-la exige reconstruir a interface.
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      # A interface é uma SPA: qualquer rota desconhecida devolve o index.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+
+  # ── Worker dedicado (planos pagos) ─────────────────────────────────────────
+  # A Render não oferece serviços de background no plano gratuito. Ao migrar
+  # para um plano pago, remova o comentário do bloco abaixo e troque
+  # WORKER_INLINE para 'false' na API: a coleta deixa de dividir processo com o
+  # servidor HTTP, que é a configuração recomendada em produção.
+  #
+  # - type: worker
+  #   name: radar-worker
+  #   runtime: node
+  #   plan: starter
+  #   region: oregon
+  #   rootDir: radar-competitivo
+  #   buildCommand: npm ci --include=dev && npm run db:generate --workspace=apps/api && npm run build --workspace=apps/api
+  #   startCommand: node apps/api/dist/src/worker-main.js
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: radar-db
+  #         property: connectionString
+  #     - key: JWT_SECRET
+  #       fromService:
+  #         name: radar-api
+  #         type: web
+  #         envVarKey: JWT_SECRET
+  #     - key: NODE_ENV
+  #       value: production
+  #     - key: ANTHROPIC_API_KEY
+  #       sync: false
