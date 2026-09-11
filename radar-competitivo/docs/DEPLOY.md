@@ -46,6 +46,22 @@ cadastro e siga o fluxo: projeto → sua empresa → concorrentes → **Analisar
   Origem não declarada não recebe cabeçalho de liberação.
 - **Migrations** — aplicadas no start da API, antes da primeira requisição.
 
+### Se aparecer `cannot have more than one active free tier database`
+
+Não é erro do projeto: o plano gratuito da Render permite **um único banco
+PostgreSQL ativo por conta**, e o blueprint está tentando criar outro.
+
+Acontece ao conectar o blueprint uma segunda vez. A Render trata cada conexão como
+uma pilha nova e, ao encontrar nomes já usados, gera variantes com sufixo aleatório
+(`radar-db-27m4`) — sinal de que os recursos originais continuam lá.
+
+O caminho é atualizar a pilha existente em vez de criar outra: descarte a tentativa
+que falhou e use **Manual Sync** no blueprint original. Ele relê o `render.yaml` do
+branch e aplica as mudanças aos serviços que já existem, sem recriar o banco.
+
+Para mudar só o comando de build, sem passar pelo blueprint, edite **Build Command**
+em cada serviço no painel e faça **Manual Deploy**.
+
 ### Se o build falhar com `TS2688: Cannot find type definition file for 'node'`
 
 Sintoma de um ambiente que instalou apenas as dependências de produção. Com
