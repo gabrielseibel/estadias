@@ -10,9 +10,9 @@ Render, para a qual o repositório já traz um blueprint pronto.
 
 ## Render (blueprint pronto)
 
-O arquivo [`render.yaml`](../../render.yaml) declara banco, API e interface. Nenhum
-campo precisa ser preenchido à mão: senha do banco, segredo de JWT e as URLs que os
-serviços trocam entre si são resolvidos pela própria Render.
+O arquivo [`render.yaml`](../../render.yaml) declara banco, API e interface. A senha do
+banco e o segredo de JWT são gerados pela própria Render; **duas variáveis precisam ser
+preenchidas depois do primeiro deploy**, quando as URLs públicas passam a existir.
 
 O blueprint fica na **raiz do repositório**, e não dentro de `radar-competitivo/`:
 a Render procura `render.yaml` apenas na raiz, e não encontra o arquivo em
@@ -31,6 +31,25 @@ A Render cria três recursos:
 | `radar-api` | API + worker embutido | free |
 | `radar-web` | Interface (site estático) | free |
 
+### Passo obrigatório após o primeiro deploy
+
+Os serviços sobem, mas interface e API ainda não se enxergam. Com as URLs públicas em
+mãos (aparecem no painel de cada serviço), defina:
+
+| Serviço | Variável | Valor |
+|---|---|---|
+| `radar-api` | `CORS_ORIGINS` | a URL da interface, ex. `https://radar-web-ab12.onrender.com` |
+| `radar-web` | `VITE_API_URL` | a URL da API, ex. `https://radar-api-ab12.onrender.com` |
+
+Depois **reconstrua a interface** (Manual Deploy em `radar-web`): `VITE_API_URL` é lida
+no momento do build, então salvar sem reconstruir não muda nada.
+
+Por que isso não é automático: a Render permite referenciar outro serviço no blueprint,
+mas a propriedade disponível devolve o **nome interno** (`radar-api-ab12`), resolvível
+apenas dentro da rede da Render. O navegador do usuário não resolve esse nome, e o
+cabeçalho `Origin` que ele envia é o domínio público — então nem a chamada da interface
+nem a verificação de CORS funcionariam com o valor interno.
+
 Ao final, a interface fica na URL de `radar-web`. Crie a conta pela própria tela de
 cadastro e siga o fluxo: projeto → sua empresa → concorrentes → **Analisar agora**.
 
@@ -39,12 +58,9 @@ cadastro e siga o fluxo: projeto → sua empresa → concorrentes → **Analisar
 - **`DATABASE_URL`** — injetada a partir do banco criado.
 - **`JWT_SECRET`** — gerado pela Render, forte e único. A API se recusa a subir em
   produção com um segredo de menos de 32 caracteres.
-- **`VITE_API_URL`** — a interface é servida de um domínio e a API de outro, então o
-  bundle precisa saber o endereço da API. A Render devolve apenas o hostname; o
-  cliente completa o esquema.
-- **`CORS_ORIGINS`** — a API recebe o hostname da interface e completa o esquema.
-  Origem não declarada não recebe cabeçalho de liberação.
 - **Migrations** — aplicadas no start da API, antes da primeira requisição.
+
+E o que exige sua mão: `CORS_ORIGINS` e `VITE_API_URL`, pelo motivo explicado acima.
 
 ### Se a interface carregar mas login e cadastro derem 404
 
@@ -59,6 +75,17 @@ momento do build, então salvar sem refazer o deploy não muda nada.
 O valor pode ser o endereço da API com ou sem `/api` no fim — a interface completa o
 prefixo quando recebe apenas a origem. Se a URL que falhou aponta para o domínio da
 API mas sem `/api` no caminho, a interface está desatualizada: reconstrua.
+
+### Se o navegador mostrar `ERR_NAME_NOT_RESOLVED` na chamada da API
+
+Olhe o host da URL que falhou. Se ele é um nome curto como `radar-api-i3eq`, **sem
+`.onrender.com`**, o valor de `VITE_API_URL` veio do nome interno do serviço — o
+endereço que só resolve dentro da rede da Render, não no computador de quem acessa.
+
+Corrija com o domínio público completo, copiado do topo da página do serviço
+`radar-api` no painel (`https://radar-api-i3eq.onrender.com`), e reconstrua a
+interface. Aproveite para conferir `CORS_ORIGINS` na API: pelo mesmo motivo, ele
+precisa ser o domínio público de `radar-web`.
 
 ### Se aparecer `cannot have more than one active free tier database`
 

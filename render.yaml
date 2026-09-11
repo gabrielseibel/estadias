@@ -6,8 +6,13 @@
 #   2. Conecte este repositório e escolha o branch
 #   3. Confirme — a Render cria o banco, a API e a interface
 #
-# Nada aqui exige preenchimento manual: a senha do banco, o segredo de JWT e as
-# URLs que os serviços trocam entre si são resolvidos pela própria Render.
+# A senha do banco e o segredo de JWT são gerados pela própria Render.
+#
+# Duas variáveis precisam ser preenchidas DEPOIS do primeiro deploy, quando as
+# URLs públicas existirem — CORS_ORIGINS na API e VITE_API_URL na interface.
+# Elas não podem ser derivadas automaticamente: a referência entre serviços da
+# Render devolve o nome interno, que o navegador não resolve. O passo a passo
+# está em radar-competitivo/docs/DEPLOY.md.
 #
 # A chave de IA é opcional e fica em branco de propósito: sem ela a plataforma
 # funciona com o motor analítico determinístico e declara a indisponibilidade
@@ -46,13 +51,16 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
-      # A interface é servida de outro domínio; o CORS precisa conhecê-lo.
-      # A Render devolve apenas o hostname — a API completa o esquema.
+      # PREENCHER APÓS O PRIMEIRO DEPLOY: a URL pública da interface, que o
+      # navegador envia no cabeçalho Origin (ex.: https://radar-web-ab12.onrender.com).
+      #
+      # Referenciar o serviço com `fromService: property: host` NÃO serve aqui:
+      # essa propriedade devolve o nome interno do serviço, resolvível apenas
+      # dentro da rede da Render. O CORS compara com a origem pública, então o
+      # valor interno nunca casaria — e o sintoma seria um bloqueio de CORS
+      # difícil de rastrear.
       - key: CORS_ORIGINS
-        fromService:
-          name: radar-web
-          type: web
-          property: host
+        sync: false
       # O plano gratuito da Render não inclui serviços de background. Com o
       # worker embutido, a coleta roda no mesmo processo da API — suficiente
       # para avaliar a plataforma. Ao migrar para um plano pago, defina
@@ -79,14 +87,18 @@ services:
     buildCommand: npm ci --include=dev && npm run build --workspace=apps/web
     staticPublishPath: apps/web/dist
     envVars:
-      # Sem isto o bundle chamaria /api na própria origem do site estático,
-      # onde não há API. A Render devolve o hostname; o cliente completa o
-      # esquema e o sufixo /api.
+      # PREENCHER APÓS O PRIMEIRO DEPLOY: a URL pública da API
+      # (ex.: https://radar-api-ab12.onrender.com). O sufixo /api é opcional —
+      # a interface o acrescenta quando recebe apenas a origem.
+      #
+      # Sem esta variável o bundle chama /api na própria origem do site
+      # estático, onde não há API. E referenciar o serviço com
+      # `fromService: property: host` não resolve: devolve o nome interno do
+      # serviço, que o navegador do usuário não consegue resolver.
+      #
+      # A variável é lida no BUILD: alterá-la exige reconstruir a interface.
       - key: VITE_API_URL
-        fromService:
-          name: radar-api
-          type: web
-          property: host
+        sync: false
     routes:
       # A interface é uma SPA: qualquer rota desconhecida devolve o index.
       - type: rewrite

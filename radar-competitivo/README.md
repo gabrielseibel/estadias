@@ -240,8 +240,9 @@ isso em produção.
 ### Colocar no ar
 
 O repositório traz um blueprint da Render ([`render.yaml`](../render.yaml)) que cria
-banco, API e interface sem preenchimento manual: **Render → New → Blueprint**, conecte
-o repositório, confirme.
+banco, API e interface: **Render → New → Blueprint**, conecte o repositório, confirme.
+Depois do primeiro deploy, duas variáveis precisam ser preenchidas com as URLs públicas
+(`CORS_ORIGINS` na API e `VITE_API_URL` na interface) — o passo está documentado.
 
 O passo a passo, as limitações do plano gratuito e o que qualquer outra plataforma
 precisa oferecer estão em [`docs/DEPLOY.md`](docs/DEPLOY.md).
