@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Building2, Users } from 'lucide-react';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { CompanyView } from '../lib/types';
 import { EmptyState, ErrorState, Loading, Panel, PanelHeader, PageHeader, ScoreBar, Table, Unavailable, Chip } from '../components/ui';
 import { num, relativeTime } from '../lib/format';
@@ -10,7 +11,7 @@ export function Companies({ onlyCompetitors = false }: { onlyCompetitors?: boole
   const [projectId] = useSelectedProject();
   const { data, error, loading, reload } = useApi<CompanyView[]>(projectId ? `/projects/${projectId}/companies` : null);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" description="Escolha um projeto na barra lateral." />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;

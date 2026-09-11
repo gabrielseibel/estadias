@@ -5,8 +5,9 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { Dashboard as DashboardData, Job } from '../lib/types';
-import { EmptyState, ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, ScoreBar, ScoreBreakdown, StatCard, Unavailable } from '../components/ui';
+import { ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, ScoreBar, ScoreBreakdown, StatCard, Unavailable } from '../components/ui';
 import { JobProgress } from '../components/JobProgress';
 import { date, num, relativeTime } from '../lib/format';
 
@@ -16,20 +17,7 @@ export function Dashboard() {
   const [activeJob, setActiveJob] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
-  if (!projectId) {
-    return (
-      <EmptyState
-        title="Nenhum projeto selecionado"
-        description="Crie um projeto, cadastre sua empresa e os concorrentes que deseja acompanhar."
-        icon={<Building2 className="h-5 w-5" />}
-        action={
-          <Link className="btn-primary" to="/projects">
-            Ir para Projetos
-          </Link>
-        }
-      />
-    );
-  }
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading label="Carregando dashboard…" />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { CalendarClock, Sparkles, Target } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { Recommendation } from '../lib/types';
 import { EmptyState, ErrorState, EvidenceLink, InfoNote, Loading, Panel, PanelHeader, PageHeader, Chip } from '../components/ui';
 import { EFFORT_LABEL, HORIZON_LABEL, PRIORITY_LABEL } from '../lib/format';
@@ -23,7 +24,7 @@ export function Recommendations() {
   const { data, error, loading, reload } = useApi<Response>(projectId ? `/projects/${projectId}/recommendations` : null);
   const [view, setView] = useState<'plano' | 'todas' | 'matriz'>('plano');
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;

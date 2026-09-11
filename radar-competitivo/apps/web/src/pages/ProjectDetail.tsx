@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Building2, Globe, Play, Plus, Radar, Search, Trash2, Loader2, Users } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
-import { useApi } from '../lib/hooks';
+import { useApi, useSelectedProject } from '../lib/hooks';
 import type { Job } from '../lib/types';
 import { EmptyState, ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, Table, Chip } from '../components/ui';
 import { JobProgress } from '../components/JobProgress';
@@ -24,6 +24,14 @@ type DiscoveryResult = {
 export function ProjectDetail() {
   const { id = '' } = useParams();
   const { data, error, loading, reload } = useApi<ProjectDetailData>(`/projects/${id}`);
+  const [, setSelectedProject] = useSelectedProject();
+
+  // Abrir o detalhe de um projeto é o gesto que o usuário entende como
+  // "selecionei este". Sem isto, a seleção continuava no projeto anterior e as
+  // demais telas mostravam outro projeto — ou nenhum — logo depois.
+  useEffect(() => {
+    if (id) setSelectedProject(id);
+  }, [id, setSelectedProject]);
   const [form, setForm] = useState({ name: '', website: '', role: 'COMPETITOR' as 'SELF' | 'COMPETITOR', city: '' });
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

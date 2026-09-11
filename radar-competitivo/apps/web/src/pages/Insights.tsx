@@ -1,6 +1,7 @@
 import { TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { HistoryResponse, Insight } from '../lib/types';
 import { EmptyState, ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader } from '../components/ui';
 import { InsightList } from '../components/InsightList';
@@ -12,7 +13,7 @@ export function Insights() {
   const { data, error, loading, reload } = useApi<Insight[]>(projectId ? `/projects/${projectId}/insights` : null);
   const { data: history } = useApi<HistoryResponse>(projectId ? `/projects/${projectId}/history` : null);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
 

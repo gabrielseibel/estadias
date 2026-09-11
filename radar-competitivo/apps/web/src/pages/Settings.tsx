@@ -1,8 +1,9 @@
 import { Activity, Database, Server, ShieldCheck } from 'lucide-react';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import { EmptyState, InfoNote, Loading, Panel, PanelHeader, PageHeader, Table, Chip } from '../components/ui';
+import { InfoNote, Loading, Panel, PanelHeader, PageHeader, Table, Chip } from '../components/ui';
 import { dateTime } from '../lib/format';
 
 type Ops = {
@@ -64,7 +65,7 @@ export function Settings() {
           <PanelHeader title="Frequência de monitoramento" subtitle="Com que periodicidade este projeto deve ser recoletado." />
           <div className="p-5">
             {!project ? (
-              <EmptyState title="Selecione um projeto" />
+              <NoProjectSelected />
             ) : (
               <>
                 <div className="flex flex-wrap gap-2">

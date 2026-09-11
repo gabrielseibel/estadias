@@ -2,8 +2,9 @@ import { useRef, useState } from 'react';
 import { CheckCircle2, Loader2, MessageSquareText, Send, ShieldAlert, Wrench } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { AskResponse } from '../lib/types';
-import { EmptyState, InfoNote, Panel, PanelHeader, PageHeader, Chip } from '../components/ui';
+import { InfoNote, Panel, PanelHeader, PageHeader, Chip } from '../components/ui';
 
 const SUGGESTIONS = [
   'Por que o concorrente à minha frente está ganhando?',
@@ -25,7 +26,7 @@ export function AskRadar() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" description="O Ask Radar responde sobre os dados de um projeto específico." />;
+  if (!projectId) return <NoProjectSelected />;
 
   async function ask(text: string) {
     if (!text.trim() || busy) return;

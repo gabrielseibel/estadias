@@ -1,7 +1,8 @@
 import { Lightbulb } from 'lucide-react';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { Insight } from '../lib/types';
-import { EmptyState, ErrorState, InfoNote, Loading, PageHeader } from '../components/ui';
+import { ErrorState, InfoNote, Loading, PageHeader } from '../components/ui';
 import { InsightList } from '../components/InsightList';
 
 /** RADAR DE OPORTUNIDADES. */
@@ -9,7 +10,7 @@ export function Opportunities() {
   const [projectId] = useSelectedProject();
   const { data, error, loading, reload } = useApi<Insight[]>(projectId ? `/projects/${projectId}/insights?kind=OPPORTUNITY` : null);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
 

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from './lib/auth';
 import { Shell } from './components/Shell';
+import { ProjectsProvider } from './lib/projects';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
@@ -38,7 +39,8 @@ export default function App() {
   if (!user) return <Login />;
 
   return (
-    <Shell>
+    <ProjectsProvider>
+      <Shell>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -65,6 +67,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </Shell>
+      </Shell>
+    </ProjectsProvider>
   );
 }

@@ -1,8 +1,9 @@
 import { ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { Insight, MatrixResponse } from '../lib/types';
-import { EmptyState, ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, ScoreBar } from '../components/ui';
+import { ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, ScoreBar } from '../components/ui';
 import { InsightList } from '../components/InsightList';
 
 /** RADAR DE AMEAÇAS + Threat Score. */
@@ -11,7 +12,7 @@ export function Threats() {
   const { data, error, loading, reload } = useApi<Insight[]>(projectId ? `/projects/${projectId}/insights?kind=THREAT` : null);
   const { data: matrix } = useApi<MatrixResponse>(projectId ? `/projects/${projectId}/matrix` : null);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
 

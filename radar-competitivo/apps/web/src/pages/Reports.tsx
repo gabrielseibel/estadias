@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Download, FileText, Loader2, Plus } from 'lucide-react';
 import { api, apiUrl, getToken } from '../lib/api';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { ReportDocument, ReportSection } from '../lib/types';
-import { EmptyState, ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, Table, Chip } from '../components/ui';
+import { ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, Table, Chip } from '../components/ui';
 import { dateTime } from '../lib/format';
 
 type ReportRow = { id: string; title: string; status: string; aiEnriched: boolean; createdAt: string };
@@ -15,7 +16,7 @@ export function Reports() {
   const { data: preview, loading: previewLoading } = useApi<ReportDocument>(projectId ? `/projects/${projectId}/reports/preview` : null);
   const [generating, setGenerating] = useState(false);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
 

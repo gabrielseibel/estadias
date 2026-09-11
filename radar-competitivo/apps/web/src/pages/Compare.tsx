@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { GitCompareArrows, Trophy } from 'lucide-react';
 import { Radar as RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadarChart as RC, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { CompanyView, MatrixResponse } from '../lib/types';
 import { EmptyState, ErrorState, InfoNote, Loading, Panel, PanelHeader, PageHeader, ScoreBar, ScoreBreakdown, Table, Unavailable, Chip } from '../components/ui';
 import { colorFor, date, num, NOT_AVAILABLE } from '../lib/format';
@@ -16,7 +17,7 @@ export function Compare() {
   const allIds = useMemo(() => data?.scores.map((s) => s.companyId) ?? [], [data]);
   const visible = selected ?? allIds;
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" description="Escolha um projeto na barra lateral para comparar empresas." />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data || data.scores.length === 0) {

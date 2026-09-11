@@ -1,6 +1,7 @@
 import { Check, ShoppingBag, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { GapAnalysis } from '../lib/types';
 import { EmptyState, ErrorState, EvidenceLink, InfoNote, Loading, Panel, PanelHeader, PageHeader, Table, Chip } from '../components/ui';
 
@@ -9,7 +10,7 @@ export function Products() {
   const [projectId] = useSelectedProject();
   const { data, error, loading, reload } = useApi<GapAnalysis>(projectId ? `/projects/${projectId}/gap` : null);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;

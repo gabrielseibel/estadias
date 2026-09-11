@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Bell, Check } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApi, useSelectedProject } from '../lib/hooks';
+import { NoProjectSelected } from '../lib/projects';
 import type { Alert } from '../lib/types';
 import { EmptyState, ErrorState, EvidenceLink, InfoNote, Loading, Panel, PanelHeader, PageHeader } from '../components/ui';
 import { dateTime, SEVERITY_META } from '../lib/format';
@@ -11,7 +12,7 @@ export function Alerts() {
   const [projectId] = useSelectedProject();
   const { data, error, loading, reload } = useApi<Alert[]>(projectId ? `/projects/${projectId}/alerts` : null);
 
-  if (!projectId) return <EmptyState title="Selecione um projeto" />;
+  if (!projectId) return <NoProjectSelected />;
   if (loading && !data) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;
