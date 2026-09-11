@@ -9,15 +9,30 @@
  * o site estático e o serviço da API têm domínios próprios — basta definir
  * `VITE_API_URL` no build com a URL da API.
  */
-function resolveBaseUrl(raw: string | undefined): string {
+export function resolveBaseUrl(raw: string | undefined): string {
   const value = (raw ?? '/api').trim().replace(/\/$/, '');
   if (!value) return '/api';
   // Caminho relativo (mesma origem) fica como está.
   if (value.startsWith('/')) return value;
+
   // Plataformas de deploy costumam expor apenas o hostname do serviço
   // ("radar-api.onrender.com"). Sem esquema, a URL seria interpretada como
   // caminho relativo e todas as chamadas falhariam silenciosamente.
-  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+
+  // A API monta todas as rotas sob /api. Quando o valor traz apenas a origem
+  // — que é o caso do hostname devolvido pela plataforma — o prefixo precisa
+  // ser acrescentado, ou cada chamada bateria na raiz do serviço e receberia
+  // 404. Um caminho informado explicitamente é respeitado como está.
+  try {
+    const parsed = new URL(withScheme);
+    if (parsed.pathname === '/' || parsed.pathname === '') {
+      return `${parsed.origin}/api`;
+    }
+  } catch {
+    // Valor não parseável: devolve como veio e deixa a falha visível.
+  }
+  return withScheme;
 }
 
 export const API_BASE_URL = resolveBaseUrl(import.meta.env.VITE_API_URL);

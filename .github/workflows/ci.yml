@@ -75,8 +75,11 @@ jobs:
       - name: Typecheck (interface)
         run: npm run typecheck --workspace=apps/web
 
-      - name: Testes
+      - name: Testes da API
         run: npm test --workspace=apps/api
+
+      - name: Testes da interface
+        run: npm test --workspace=apps/web
 
       - name: Build
         run: npm run build

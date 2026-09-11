@@ -3,12 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "description": "Radar Competitivo - SaaS de inteligencia competitiva (monitoramento, comparacao e analise de concorrentes)",
-  "workspaces": ["apps/api", "apps/web"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "npm run dev --workspace=apps/api & npm run dev --workspace=apps/web",
     "build": "npm run build --workspace=apps/api && npm run build --workspace=apps/web",
-    "test": "npm run test --workspace=apps/api",
+    "test": "npm run test --workspace=apps/api && npm run test --workspace=apps/web",
     "db:migrate": "npm run db:migrate --workspace=apps/api",
     "db:seed:demo": "npm run db:seed:demo --workspace=apps/api"
   }

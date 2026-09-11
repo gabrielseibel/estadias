@@ -46,6 +46,20 @@ cadastro e siga o fluxo: projeto → sua empresa → concorrentes → **Analisar
   Origem não declarada não recebe cabeçalho de liberação.
 - **Migrations** — aplicadas no start da API, antes da primeira requisição.
 
+### Se a interface carregar mas login e cadastro derem 404
+
+Olhe a URL que falhou (F12 → Network). Se ela aponta para o domínio da **própria
+interface** — algo como `https://radar-web.onrender.com/api/auth/register` — o build
+do site estático não recebeu `VITE_API_URL` e caiu no padrão de mesma origem, onde
+não existe API.
+
+Defina `VITE_API_URL` no serviço da interface e **reconstrua**: a variável é lida no
+momento do build, então salvar sem refazer o deploy não muda nada.
+
+O valor pode ser o endereço da API com ou sem `/api` no fim — a interface completa o
+prefixo quando recebe apenas a origem. Se a URL que falhou aponta para o domínio da
+API mas sem `/api` no caminho, a interface está desatualizada: reconstrua.
+
 ### Se aparecer `cannot have more than one active free tier database`
 
 Não é erro do projeto: o plano gratuito da Render permite **um único banco
