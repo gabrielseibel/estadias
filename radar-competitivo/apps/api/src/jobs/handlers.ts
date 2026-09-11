@@ -134,7 +134,9 @@ async function runFullAnalysis(job: CrawlJob) {
   await updateProgress(job.id, { done, total: totalSteps, step: 'Gerando síntese executiva' });
   const synthesis = await generateExecutiveSynthesis(job.projectId, job.organizationId);
   done++;
-  await appendLog(job.id, synthesis.status === 'UNAVAILABLE' ? 'warn' : 'info', synthesis.message);
+  // Sem chave de IA não é anomalia, é configuração: registrar como aviso
+  // faria a etapa parecer uma falha da análise, que concluiu normalmente.
+  await appendLog(job.id, 'info', synthesis.message);
 
   await updateProgress(job.id, { done, total: totalSteps });
   const status = unreachable === companies.length ? JobStatus.FAILED : unreachable > 0 ? JobStatus.PARTIAL : JobStatus.COMPLETED;
@@ -150,7 +152,9 @@ async function runAiAnalysis(job: CrawlJob) {
   await runProjectAnalysis(job.projectId);
   await updateProgress(job.id, { done: 1, total: 2, step: 'Gerando síntese executiva', status: JobStatus.PROCESSING });
   const synthesis = await generateExecutiveSynthesis(job.projectId, job.organizationId);
-  await appendLog(job.id, synthesis.status === 'UNAVAILABLE' ? 'warn' : 'info', synthesis.message);
+  // Sem chave de IA não é anomalia, é configuração: registrar como aviso
+  // faria a etapa parecer uma falha da análise, que concluiu normalmente.
+  await appendLog(job.id, 'info', synthesis.message);
   await updateProgress(job.id, { done: 2, total: 2 });
   await finishJob(job.id, JobStatus.COMPLETED);
 }

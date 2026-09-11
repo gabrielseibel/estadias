@@ -24,5 +24,12 @@ export function aiClient(): Anthropic {
   return client;
 }
 
+/**
+ * Texto exibido onde a IA entraria.
+ *
+ * Começa pelo que existe, não pelo que falta: a ausência da chave não degrada
+ * a análise, e uma mensagem que abre com "defina ANTHROPIC_API_KEY" faz um
+ * passo opcional parecer um pré-requisito da plataforma.
+ */
 export const AI_UNAVAILABLE_MESSAGE =
-  'Camada de IA não configurada. Defina ANTHROPIC_API_KEY para habilitar a síntese executiva e o chat Ask Radar. Todo o restante da plataforma — scores, matriz competitiva, GAP de oferta, oportunidades, ameaças, recomendações e relatórios — continua funcionando com o motor analítico determinístico.';
+  'Camada de IA não configurada — ela é opcional. A análise é produzida pelo motor determinístico e não depende de IA: scores, matriz competitiva, GAP de oferta, oportunidades, ameaças, recomendações, alertas e relatórios continuam completos. Com ANTHROPIC_API_KEY definida, a IA acrescenta duas coisas: a síntese executiva em texto e o chat Ask Radar.';
