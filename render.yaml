@@ -31,7 +31,10 @@ services:
     plan: free
     region: oregon
     rootDir: radar-competitivo
-    buildCommand: npm ci && npm run db:generate --workspace=apps/api && npm run build --workspace=apps/api
+    # --include=dev é obrigatório: NODE_ENV=production faz o npm ci pular as
+    # devDependencies, e typescript, @types/node e a CLI do Prisma estão lá —
+    # as três são necessárias para compilar e para aplicar migrations no start.
+    buildCommand: npm ci --include=dev && npm run db:generate --workspace=apps/api && npm run build --workspace=apps/api
     startCommand: npm run db:deploy --workspace=apps/api && node apps/api/dist/src/main.js
     healthCheckPath: /api/health
     envVars:
@@ -72,7 +75,8 @@ services:
     name: radar-web
     runtime: static
     rootDir: radar-competitivo
-    buildCommand: npm ci && npm run build --workspace=apps/web
+    # Mesmo motivo do serviço da API: vite e typescript são devDependencies.
+    buildCommand: npm ci --include=dev && npm run build --workspace=apps/web
     staticPublishPath: apps/web/dist
     envVars:
       # Sem isto o bundle chamaria /api na própria origem do site estático,
@@ -108,7 +112,7 @@ services:
   #   plan: starter
   #   region: oregon
   #   rootDir: radar-competitivo
-  #   buildCommand: npm ci && npm run db:generate --workspace=apps/api && npm run build --workspace=apps/api
+  #   buildCommand: npm ci --include=dev && npm run db:generate --workspace=apps/api && npm run build --workspace=apps/api
   #   startCommand: node apps/api/dist/src/worker-main.js
   #   envVars:
   #     - key: DATABASE_URL

@@ -46,6 +46,21 @@ cadastro e siga o fluxo: projeto → sua empresa → concorrentes → **Analisar
   Origem não declarada não recebe cabeçalho de liberação.
 - **Migrations** — aplicadas no start da API, antes da primeira requisição.
 
+### Se o build falhar com `TS2688: Cannot find type definition file for 'node'`
+
+Sintoma de um ambiente que instalou apenas as dependências de produção. Com
+`NODE_ENV=production`, o `npm ci` pula as `devDependencies` — e `typescript`,
+`@types/node` e a CLI do Prisma estão lá, porque são ferramentas de build, não de
+execução.
+
+O blueprint usa `npm ci --include=dev` justamente por isso. Se você configurou os
+serviços à mão em vez de usar o blueprint, ajuste o comando de build para incluir as
+dependências de desenvolvimento.
+
+O CI executa os comandos de build lidos do próprio `render.yaml`, com
+`NODE_ENV=production`, para que essa divergência entre ambiente de teste e de deploy
+não volte a passar despercebida.
+
 ### Limitações do plano gratuito
 
 Ditas aqui porque afetam o que você vai observar, não porque impeçam o uso:

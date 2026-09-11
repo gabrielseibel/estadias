@@ -80,3 +80,45 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Um deploy quebrou porque o ambiente de produção instala dependências de
+  # forma diferente do CI: com NODE_ENV=production o npm pula as
+  # devDependencies, e typescript, @types/node e a CLI do Prisma estão lá.
+  # Este job executa o comando de build declarado no render.yaml, lido do
+  # próprio arquivo, para que CI e deploy não possam divergir em silêncio.
+  build-de-producao:
+    name: Build de produção (comando do render.yaml)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Extrair os comandos de build do blueprint
+        id: blueprint
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import yaml
+          # O job roda em radar-competitivo/ (defaults do workflow); o
+          # blueprint fica na raiz, que é onde a Render o procura.
+          blueprint = yaml.safe_load(open('../render.yaml'))
+          for service in blueprint['services']:
+              print(f"{service['name'].replace('-', '_')}={service['buildCommand']}")
+          PY
+
+      - name: Build da API como em produção
+        run: ${{ steps.blueprint.outputs.radar_api }}
+
+      - name: Build da interface como em produção
+        run: ${{ steps.blueprint.outputs.radar_web }}
+
+      - name: Confirmar os artefatos que os serviços executam
+        run: |
+          test -f apps/api/dist/src/main.js
+          test -f apps/api/dist/src/worker-main.js
+          test -f apps/web/dist/index.html
